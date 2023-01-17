@@ -20,7 +20,7 @@ import (
 	"github.com/prometheus/exporter-toolkit/web"
 	"gopkg.in/alecthomas/kingpin.v2"
 
-	"github.com/iamseth/oracledb_exporter/collector"
+	"github.com/observiq/oracledb_exporter/collector"
 )
 
 var (

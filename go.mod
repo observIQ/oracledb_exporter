@@ -1,4 +1,4 @@
-module github.com/iamseth/oracledb_exporter
+module github.com/observiq/oracledb_exporter
 
 go 1.18
 
