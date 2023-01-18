@@ -70,7 +70,7 @@ func main() {
 	prometheus.MustRegister(exporter)
 	prometheus.MustRegister(version.NewCollector("oracledb_exporter"))
 
-	level.Info(logger).Log("msg", "Starting apache_exporter", "version", version.Info())
+	level.Info(logger).Log("msg", "Starting oracledb_exporter", "version", version.Info())
 	level.Info(logger).Log("msg", "Build context", "build", version.BuildContext())
 	level.Info(logger).Log("msg", "Starting Server: ", "listen_address", *listenAddress)
 	level.Info(logger).Log("msg", "Collect from: ", "metricPath", *metricPath)
@@ -80,7 +80,7 @@ func main() {
 		sig := <-gracefulStop
 		level.Info(logger).Log("msg", "caught sig: %+v. Wait 2 seconds...", "sig", sig)
 		time.Sleep(2 * time.Second)
-		level.Info(logger).Log("msg", "Terminate apache-exporter on port:", "listen_address", *listenAddress)
+		level.Info(logger).Log("msg", "Terminate oracledb_exporter on port:", "listen_address", *listenAddress)
 		os.Exit(0)
 	}()
 
