@@ -9,7 +9,6 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/go-kit/kit/log"
 	"github.com/go-kit/log/level"
 	_ "github.com/mattn/go-oci8"
 	"github.com/prometheus/client_golang/prometheus"
@@ -97,15 +96,6 @@ func main() {
 		level.Error(logger).Log("msg", "Listening error", "reason", err)
 		os.Exit(1)
 	}
-}
-
-func watchForSigInt(logger log.Logger) {
-	level.Info(logger).Log("msg", "listening and wait for graceful stop")
-	sig := <-gracefulStop
-	level.Info(logger).Log("msg", "caught sig: %+v. Wait 2 seconds...", "sig", sig)
-	time.Sleep(2 * time.Second)
-	level.Info(logger).Log("msg", "Terminate apache-exporter on port:", "listen_address", *listenAddress)
-	os.Exit(0)
 }
 
 // getEnv returns the value of an environment variable, or returns the provided fallback value

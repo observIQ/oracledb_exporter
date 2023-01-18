@@ -36,6 +36,7 @@ type Exporter struct {
 	logger          log.Logger
 }
 
+// Config is the configuration of the exporter
 type Config struct {
 	DSN                string
 	DefaultFileMetrics string
@@ -46,7 +47,7 @@ type Config struct {
 	ScrapeInterval     time.Duration
 }
 
-// Metrics object description
+// Metric is an object description
 type Metric struct {
 	Context          string
 	Labels           []string
@@ -58,6 +59,7 @@ type Metric struct {
 	IgnoreZeroResult bool
 }
 
+// Metrics is a container structure for prometheus metrics
 type Metrics struct {
 	Metric []Metric
 }
@@ -70,23 +72,16 @@ var (
 	exporterName      = "exporter"
 )
 
-// getEnv returns the value of an environment variable, or returns the provided fallback value
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}
-
 func maskDsn(dsn string) string {
 	parts := strings.Split(dsn, "@")
 	if len(parts) > 1 {
-		maskedUrl := "***@" + parts[1]
-		return maskedUrl
+		maskedURL := "***@" + parts[1]
+		return maskedURL
 	}
 	return dsn
 }
 
+// NewExporter creates a new Exporter instance
 func NewExporter(logger log.Logger, cfg *Config) (*Exporter, error) {
 	e := &Exporter{
 		dsn: cfg.DSN,
