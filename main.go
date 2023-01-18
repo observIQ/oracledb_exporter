@@ -7,13 +7,13 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/go-kit/log/level"
-	_ "github.com/mattn/go-oci8"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
+	_ "github.com/sijms/go-ora/v2"
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/observiq/oracledb_exporter/collector"
@@ -31,7 +31,6 @@ var (
 	maxOpenConns       = kingpin.Flag("database.maxOpenConns", "Number of maximum open connections in the connection pool. (env: DATABASE_MAXOPENCONNS)").Default(getEnv("DATABASE_MAXOPENCONNS", "10")).Int()
 	tlsconfigFile      = kingpin.Flag("web.config", "Path to config yaml file that can enable TLS or authentication.").Default("").String()
 	scrapeInterval     = kingpin.Flag("scrape.interval", "Interval between each scrape. Default is to scrape on collect requests").Default("0s").Duration()
-	// gracefulStop       = make(chan os.Signal)
 )
 
 func main() {

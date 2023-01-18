@@ -254,7 +254,7 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric) {
 
 func (e *Exporter) connect() error {
 	level.Debug(e.logger).Log("Launching connection: ", maskDsn(e.dsn))
-	db, err := sql.Open("oci8", e.dsn)
+	db, err := sql.Open("oracle", e.dsn)
 	if err != nil {
 		level.Error(e.logger).Log("Error while connecting to", e.dsn)
 		panic(err)
