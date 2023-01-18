@@ -3,9 +3,6 @@ package main
 import (
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	_ "net/http/pprof"
 
@@ -34,7 +31,7 @@ var (
 	maxOpenConns       = kingpin.Flag("database.maxOpenConns", "Number of maximum open connections in the connection pool. (env: DATABASE_MAXOPENCONNS)").Default(getEnv("DATABASE_MAXOPENCONNS", "10")).Int()
 	tlsconfigFile      = kingpin.Flag("web.config", "Path to config yaml file that can enable TLS or authentication.").Default("").String()
 	scrapeInterval     = kingpin.Flag("scrape.interval", "Interval between each scrape. Default is to scrape on collect requests").Default("0s").Duration()
-	gracefulStop       = make(chan os.Signal)
+	// gracefulStop       = make(chan os.Signal)
 )
 
 func main() {
@@ -45,11 +42,6 @@ func main() {
 	kingpin.Version(version.Print("oracledb_exporter"))
 	kingpin.Parse()
 	logger := promlog.New(promLogConfig)
-
-	signal.Notify(gracefulStop, syscall.SIGTERM)
-	signal.Notify(gracefulStop, syscall.SIGINT)
-	signal.Notify(gracefulStop, syscall.SIGHUP)
-	signal.Notify(gracefulStop, syscall.SIGQUIT)
 
 	dsn := os.Getenv("DATA_SOURCE_NAME")
 
@@ -73,15 +65,6 @@ func main() {
 	level.Info(logger).Log("msg", "Build context", "build", version.BuildContext())
 	level.Info(logger).Log("msg", "Starting Server: ", "listen_address", *listenAddress)
 	level.Info(logger).Log("msg", "Collect from: ", "metricPath", *metricPath)
-
-	go func() {
-		level.Info(logger).Log("msg", "listening and wait for graceful stop")
-		sig := <-gracefulStop
-		level.Info(logger).Log("msg", "caught sig: %+v. Wait 2 seconds...", "sig", sig)
-		time.Sleep(2 * time.Second)
-		level.Info(logger).Log("msg", "Terminate oracledb_exporter on port:", "listen_address", *listenAddress)
-		os.Exit(0)
-	}()
 
 	opts := promhttp.HandlerOpts{
 		ErrorHandling: promhttp.ContinueOnError,
