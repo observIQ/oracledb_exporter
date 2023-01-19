@@ -25,6 +25,8 @@ import (
 type Exporter struct {
 	config *Config
 
+	mu              *sync.Mutex
+	metricsToScrape Metrics
 	scrapeInterval  *time.Duration
 	dsn             string
 	duration, error prometheus.Gauge
@@ -38,13 +40,24 @@ type Exporter struct {
 
 // Config is the configuration of the exporter
 type Config struct {
-	DSN                string
-	DefaultFileMetrics string
-	MaxIdleConns       int
-	MaxOpenConns       int
-	CustomMetrics      string
-	QueryTimeout       string
-	ScrapeInterval     time.Duration
+	DSN            string
+	MaxIdleConns   int
+	MaxOpenConns   int
+	CustomMetrics  string
+	QueryTimeout   string
+	ScrapeInterval time.Duration
+}
+
+// CreateDefaultConfig returns the default configuration of the Exporter
+// it is to be of note that the DNS will be empty when
+func CreateDefaultConfig() *Config {
+	return &Config{
+		MaxIdleConns:   0,
+		MaxOpenConns:   10,
+		CustomMetrics:  "",
+		QueryTimeout:   "5",
+		ScrapeInterval: 0,
+	}
 }
 
 // Metric is an object description
@@ -65,7 +78,6 @@ type Metrics struct {
 }
 
 var (
-	metricsToScrap    Metrics
 	additionalMetrics Metrics
 	hashMap           map[int][]byte
 	namespace         = "oracledb"
@@ -84,6 +96,7 @@ func maskDsn(dsn string) string {
 // NewExporter creates a new Exporter instance
 func NewExporter(logger log.Logger, cfg *Config) (*Exporter, error) {
 	e := &Exporter{
+		mu:  &sync.Mutex{},
 		dsn: cfg.DSN,
 		duration: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
@@ -117,6 +130,7 @@ func NewExporter(logger log.Logger, cfg *Config) (*Exporter, error) {
 		logger: logger,
 		config: cfg,
 	}
+	e.metricsToScrape = e.DefaultMetrics()
 	err := e.connect()
 	return e, err
 }
@@ -151,6 +165,8 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect implements prometheus.Collector.
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+	e.mu.Lock() // ensure no simultaneous scrapes
+	defer e.mu.Unlock()
 	if e.config.ScrapeInterval == 0 { // if we are to scrape when the request is made
 		e.scrape(ch)
 	} else {
@@ -189,7 +205,7 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric) {
 	}
 	if err = e.db.Ping(); err != nil {
 		level.Error(e.logger).Log("Error pinging oracle:", err)
-		//e.db.Close()
+		// e.db.Close()
 		e.up.Set(0)
 		return
 	}
@@ -198,12 +214,12 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric) {
 	e.up.Set(1)
 
 	if e.checkIfMetricsChanged() {
-		e.reloadMetrics(e.logger)
+		e.reloadMetrics()
 	}
 
 	wg := sync.WaitGroup{}
 
-	for _, metric := range metricsToScrap.Metric {
+	for _, metric := range e.metricsToScrape.Metric {
 		wg.Add(1)
 		metric := metric //https://golang.org/doc/faq#closures_and_goroutines
 
@@ -301,31 +317,27 @@ func hashFile(h hash.Hash, fn string) error {
 	return nil
 }
 
-func (e *Exporter) reloadMetrics(logger log.Logger) {
-	// Truncate metricsToScrap
-	metricsToScrap.Metric = []Metric{}
+func (e *Exporter) reloadMetrics() {
+	// Truncate metricsToScrape
+	e.metricsToScrape.Metric = []Metric{}
 
 	// Load default metrics
-	if _, err := toml.DecodeFile(e.config.DefaultFileMetrics, &metricsToScrap); err != nil {
-		level.Error(logger).Log(err)
-		panic(errors.New("Error while loading " + e.config.DefaultFileMetrics))
-	} else {
-		level.Info(logger).Log("Successfully loaded default metrics from: " + e.config.DefaultFileMetrics)
-	}
+	defaultMetrics := e.DefaultMetrics()
+	e.metricsToScrape.Metric = defaultMetrics.Metric
 
 	// If custom metrics, load it
 	if strings.Compare(e.config.CustomMetrics, "") != 0 {
 		for _, _customMetrics := range strings.Split(e.config.CustomMetrics, ",") {
 			if _, err := toml.DecodeFile(_customMetrics, &additionalMetrics); err != nil {
-				level.Error(logger).Log(err)
+				level.Error(e.logger).Log(err)
 				panic(errors.New("Error while loading " + _customMetrics))
 			} else {
-				level.Info(logger).Log("Successfully loaded custom metrics from: " + _customMetrics)
+				level.Info(e.logger).Log("Successfully loaded custom metrics from: " + _customMetrics)
 			}
-			metricsToScrap.Metric = append(metricsToScrap.Metric, additionalMetrics.Metric...)
+			e.metricsToScrape.Metric = append(e.metricsToScrape.Metric, additionalMetrics.Metric...)
 		}
 	} else {
-		level.Info(logger).Log("No custom metrics defined.")
+		level.Debug(e.logger).Log("No custom metrics defined.")
 	}
 }
 
