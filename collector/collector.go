@@ -44,7 +44,7 @@ type Config struct {
 	MaxIdleConns   int
 	MaxOpenConns   int
 	CustomMetrics  string
-	QueryTimeout   string
+	QueryTimeout   int
 	ScrapeInterval time.Duration
 }
 
@@ -55,7 +55,7 @@ func CreateDefaultConfig() *Config {
 		MaxIdleConns:   0,
 		MaxOpenConns:   10,
 		CustomMetrics:  "",
-		QueryTimeout:   "5",
+		QueryTimeout:   5,
 		ScrapeInterval: 0,
 	}
 }
@@ -458,14 +458,7 @@ func (e *Exporter) scrapeGenericValues(db *sql.DB, ch chan<- prometheus.Metric, 
 // inspired by https://kylewbanks.com/blog/query-result-to-map-in-golang
 // Parse SQL result and call parsing function to each row
 func (e *Exporter) generatePrometheusMetrics(db *sql.DB, parse func(row map[string]string) error, query string) error {
-
-	// Add a timeout
-	timeout, err := strconv.Atoi(e.config.QueryTimeout)
-	if err != nil {
-		level.Error(e.logger).Log("error while converting timeout option value: ", err)
-		panic(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(e.config.QueryTimeout)*time.Second)
 	defer cancel()
 	rows, err := db.QueryContext(ctx, query)
 
