@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"os"
 
@@ -41,20 +42,24 @@ func main() {
 	kingpin.Version(version.Print("oracledb_exporter"))
 	kingpin.Parse()
 	logger := promlog.New(promLogConfig)
-
 	dsn := os.Getenv("DATA_SOURCE_NAME")
 
 	config := &collector.Config{
-		DSN:            dsn,
-		MaxOpenConns:   *maxOpenConns,
-		MaxIdleConns:   *maxIdleConns,
-		ScrapeInterval: *scrapeInterval,
-		CustomMetrics:  *customMetrics,
-		QueryTimeout:   *queryTimeout,
+		DSN:           dsn,
+		MaxOpenConns:  *maxOpenConns,
+		MaxIdleConns:  *maxIdleConns,
+		CustomMetrics: *customMetrics,
+		QueryTimeout:  *queryTimeout,
 	}
 	exporter, err := collector.NewExporter(logger, config)
 	if err != nil {
 		level.Error(logger).Log("unable to connect to DB", err)
+	}
+
+	if *scrapeInterval != 0 {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go exporter.RunScheduledScrapes(ctx, *scrapeInterval)
 	}
 
 	prometheus.MustRegister(exporter)

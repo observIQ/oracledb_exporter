@@ -23,8 +23,7 @@ import (
 
 // Exporter collects Oracle DB metrics. It implements prometheus.Collector.
 type Exporter struct {
-	config *Config
-
+	config          *Config
 	mu              *sync.Mutex
 	metricsToScrape Metrics
 	scrapeInterval  *time.Duration
@@ -40,23 +39,21 @@ type Exporter struct {
 
 // Config is the configuration of the exporter
 type Config struct {
-	DSN            string
-	MaxIdleConns   int
-	MaxOpenConns   int
-	CustomMetrics  string
-	QueryTimeout   int
-	ScrapeInterval time.Duration
+	DSN           string
+	MaxIdleConns  int
+	MaxOpenConns  int
+	CustomMetrics string
+	QueryTimeout  int
 }
 
 // CreateDefaultConfig returns the default configuration of the Exporter
 // it is to be of note that the DNS will be empty when
 func CreateDefaultConfig() *Config {
 	return &Config{
-		MaxIdleConns:   0,
-		MaxOpenConns:   10,
-		CustomMetrics:  "",
-		QueryTimeout:   5,
-		ScrapeInterval: 0,
+		MaxIdleConns:  0,
+		MaxOpenConns:  10,
+		CustomMetrics: "",
+		QueryTimeout:  5,
 	}
 }
 
@@ -167,19 +164,41 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	e.mu.Lock() // ensure no simultaneous scrapes
 	defer e.mu.Unlock()
-	if e.config.ScrapeInterval == 0 { // if we are to scrape when the request is made
-		e.scrape(ch)
-	} else {
-		scrapeResults := e.scrapeResults // There is a risk that e.scrapeResults will be replaced while we traverse this look. This should mitigate that risk
-		for idx := range scrapeResults {
-			ch <- scrapeResults[idx]
-		}
-	}
+	e.scrape(ch)
 	ch <- e.duration
 	ch <- e.totalScrapes
 	ch <- e.error
 	e.scrapeErrors.Collect(ch)
 	ch <- e.up
+}
+
+// RunScheduledScrapes is only relevant for users of this package that want to set the scrape on a timer
+// rather than letting it be per Collect call
+func (e *Exporter) RunScheduledScrapes(ctx context.Context, si time.Duration) {
+	ticker := time.NewTicker(si)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			metricCh := make(chan prometheus.Metric, 5)
+			go func() {
+				scrapeResults := []prometheus.Metric{}
+				for {
+					scrapeResult, more := <-metricCh
+					if more {
+						scrapeResults = append(scrapeResults, scrapeResult)
+						continue
+					}
+					return
+				}
+			}()
+			e.scrape(metricCh)
+			close(metricCh)
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func (e *Exporter) scrape(ch chan<- prometheus.Metric) {
@@ -199,13 +218,13 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric) {
 			level.Info(e.logger).Log("Reconnecting to DB")
 			err = e.connect()
 			if err != nil {
-				level.Error(e.logger).Log("Error reconnectin to DB", err)
+				level.Error(e.logger).Log("Error reconnecting to DB", err)
 			}
 		}
 	}
+
 	if err = e.db.Ping(); err != nil {
 		level.Error(e.logger).Log("Error pinging oracle:", err)
-		// e.db.Close()
 		e.up.Set(0)
 		return
 	}
@@ -273,7 +292,7 @@ func (e *Exporter) connect() error {
 	db, err := sql.Open("oracle", e.dsn)
 	if err != nil {
 		level.Error(e.logger).Log("Error while connecting to", e.dsn)
-		panic(err)
+		return err
 	}
 	level.Debug(e.logger).Log("set max idle connections to ", e.config.MaxIdleConns)
 	db.SetMaxIdleConns(e.config.MaxIdleConns)
