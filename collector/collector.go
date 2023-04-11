@@ -164,6 +164,16 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	e.mu.Lock() // ensure no simultaneous scrapes
 	defer e.mu.Unlock()
+	if *e.scrapeInterval != 0 {
+		// report metadata metrics
+		ch <- e.duration
+		ch <- e.totalScrapes
+		ch <- e.error
+		e.scrapeErrors.Collect(ch)
+		ch <- e.up
+		return
+	}
+
 	e.scrape(ch)
 	ch <- e.duration
 	ch <- e.totalScrapes
@@ -181,13 +191,15 @@ func (e *Exporter) RunScheduledScrapes(ctx context.Context, si time.Duration) {
 	for {
 		select {
 		case <-ticker.C:
+			mChan := make(chan prometheus.Metric)
+			e.Collect(mChan)
 			metricCh := make(chan prometheus.Metric, 5)
 			go func() {
-				scrapeResults := []prometheus.Metric{}
+				e.scrapeResults = []prometheus.Metric{}
 				for {
 					scrapeResult, more := <-metricCh
 					if more {
-						scrapeResults = append(scrapeResults, scrapeResult)
+						e.scrapeResults = append(e.scrapeResults, scrapeResult)
 						continue
 					}
 					return
