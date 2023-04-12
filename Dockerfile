@@ -1,4 +1,10 @@
-FROM golang:1.19 AS build
+# Can't use a variable to refer to external image directly with COPY.
+# So using image in a step but doing nothing
+ARG ORACLE_IMAGE
+FROM ${ORACLE_IMAGE} as oracle-image
+
+# Build is starting here
+FROM docker.io/library/golang:1.19 AS build
 
 ARG ORACLE_VERSION
 ENV ORACLE_VERSION=${ORACLE_VERSION}
@@ -6,14 +12,15 @@ ARG MAJOR_VERSION
 ENV MAJOR_VERSION=${MAJOR_VERSION}
 ENV LD_LIBRARY_PATH "/usr/lib/oracle/${MAJOR_VERSION}/client64/lib"
 
-RUN apt-get -qq update && apt-get install --no-install-recommends -qq libaio1 rpm
-COPY oracle*${ORACLE_VERSION}*.rpm /
-RUN rpm -Uh --nodeps /oracle-instantclient*.x86_64.rpm && rm /*.rpm
+# Retrieving binaries from oracle image
+COPY --from=oracle-image /usr/lib/oracle /usr/lib/oracle
+COPY --from=oracle-image /usr/share/oracle /usr/share/oracle
+COPY --from=oracle-image /usr/include/oracle /usr/include/oracle
 
 COPY oci8.pc.template /usr/share/pkgconfig/oci8.pc
 RUN sed -i "s/@ORACLE_VERSION@/$ORACLE_VERSION/g" /usr/share/pkgconfig/oci8.pc && \
-    sed -i "s/@MAJOR_VERSION@/$MAJOR_VERSION/g" /usr/share/pkgconfig/oci8.pc && \
-    find /usr -name oci.pc
+  sed -i "s/@MAJOR_VERSION@/$MAJOR_VERSION/g" /usr/share/pkgconfig/oci8.pc && \
+  find /usr -name oci.pc
 RUN echo $LD_LIBRARY_PATH >> /etc/ld.so.conf.d/oracle.conf && ldconfig
 
 WORKDIR /go/src/oracledb_exporter
@@ -24,29 +31,30 @@ ARG VERSION
 ENV VERSION ${VERSION:-0.1.0}
 
 ENV PKG_CONFIG_PATH /go/src/oracledb_exporter
-ENV GOOS            linux
 
-RUN go build -v -ldflags "-X main.Version=${VERSION} -s -w"
+RUN GOOS=linux GOARCH=amd64 go build -v -ldflags "-X main.Version=${VERSION} -s -w"
 
-FROM ubuntu:22.04
-LABEL authors="Seth Miller,Yannig Perré"
-LABEL maintainer="Yannig Perré <yannig.perre@gmail.com>"
+FROM docker.io/library/ubuntu:22.10
+LABEL org.opencontainers.image.authors="Seth Miller,Yannig Perré <yannig.perre@gmail.com>"
+LABEL org.opencontainers.image.description="Oracle DB Exporter"
 
 ENV VERSION ${VERSION:-0.1.0}
 ENV DEBIAN_FRONTEND=noninteractive
 
-COPY oracle-instantclient*${ORACLE_VERSION}*basic*.rpm /
-
+# We only need lib directory
+COPY --from=build /usr/lib/oracle /usr/lib/oracle
 RUN apt-get -qq update && \
-  apt-get -qq install --no-install-recommends tzdata libaio1 rpm -y && rpm -Uvh --nodeps /oracle*${ORACLE_VERSION}*rpm && \
-    rm -f /oracle*rpm
+  apt-get -qq install -y --no-install-recommends tzdata libaio1 && \
+  rm -rf /var/lib/apt/lists/*
 
 RUN adduser --system --uid 1000 --group appuser \
   && usermod -a -G 0,appuser appuser
 
 ARG ORACLE_VERSION
 ENV ORACLE_VERSION=${ORACLE_VERSION}
-ENV LD_LIBRARY_PATH "/usr/lib/oracle/${ORACLE_VERSION}/client64/lib"
+ARG MAJOR_VERSION
+ENV MAJOR_VERSION=${MAJOR_VERSION}
+ENV LD_LIBRARY_PATH "/usr/lib/oracle/${MAJOR_VERSION}/client64/lib"
 RUN echo $LD_LIBRARY_PATH >> /etc/ld.so.conf.d/oracle.conf && ldconfig
 
 ARG LEGACY_TABLESPACE
