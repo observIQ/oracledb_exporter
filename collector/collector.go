@@ -164,7 +164,7 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	e.mu.Lock() // ensure no simultaneous scrapes
 	defer e.mu.Unlock()
-	if *e.scrapeInterval != 0 {
+	if e.scrapeInterval != nil && *e.scrapeInterval != 0 {
 		// report metadata metrics
 		ch <- e.duration
 		ch <- e.totalScrapes
