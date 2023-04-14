@@ -162,18 +162,21 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect implements prometheus.Collector.
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-	e.mu.Lock() // ensure no simultaneous scrapes
-	defer e.mu.Unlock()
+	// they are running scheduled scrapes we should only scrape new data
+	// on the interval
 	if e.scrapeInterval != nil && *e.scrapeInterval != 0 {
-		// report metadata metrics
-		ch <- e.duration
-		ch <- e.totalScrapes
-		ch <- e.error
-		e.scrapeErrors.Collect(ch)
-		ch <- e.up
+		// read access must be checked
+		e.mu.Lock()
+		for _, r := range e.scrapeResults {
+			ch <- r
+		}
+		e.mu.Unlock()
 		return
 	}
 
+	// otherwise do a normal scrape per request
+	e.mu.Lock() // ensure no simultaneous scrapes
+	defer e.mu.Unlock()
 	e.scrape(ch)
 	ch <- e.duration
 	ch <- e.totalScrapes
@@ -185,32 +188,50 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 // RunScheduledScrapes is only relevant for users of this package that want to set the scrape on a timer
 // rather than letting it be per Collect call
 func (e *Exporter) RunScheduledScrapes(ctx context.Context, si time.Duration) {
+	e.scrapeInterval = &si
 	ticker := time.NewTicker(si)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			mChan := make(chan prometheus.Metric)
-			e.Collect(mChan)
-			metricCh := make(chan prometheus.Metric, 5)
-			go func() {
-				e.scrapeResults = []prometheus.Metric{}
-				for {
-					scrapeResult, more := <-metricCh
-					if more {
-						e.scrapeResults = append(e.scrapeResults, scrapeResult)
-						continue
-					}
-					return
-				}
-			}()
-			e.scrape(metricCh)
-			close(metricCh)
+			e.mu.Lock() // ensure no simultaneous scrapes
+			e.scheduledScrape()
+			e.mu.Unlock()
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+func (e *Exporter) scheduledScrape() {
+	metricCh := make(chan prometheus.Metric, 5)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		e.scrapeResults = []prometheus.Metric{}
+		for {
+			scrapeResult, more := <-metricCh
+			if more {
+				e.scrapeResults = append(e.scrapeResults, scrapeResult)
+				continue
+			}
+			return
+		}
+	}()
+	e.scrape(metricCh)
+
+	// report metadata metrics
+	metricCh <- e.duration
+	metricCh <- e.totalScrapes
+	metricCh <- e.error
+	e.scrapeErrors.Collect(metricCh)
+	metricCh <- e.up
+
+	close(metricCh)
+	wg.Wait()
 }
 
 func (e *Exporter) scrape(ch chan<- prometheus.Metric) {
@@ -558,4 +579,12 @@ func cleanName(s string) string {
 	s = strings.Replace(s, "*", "", -1)  // Remove asterisks
 	s = strings.ToLower(s)
 	return s
+}
+
+func (e *Exporter) logError(s string) {
+	_ = level.Error(e.logger).Log(s)
+}
+
+func (e *Exporter) logDebug(s string) {
+	_ = level.Debug(e.logger).Log(s)
 }
