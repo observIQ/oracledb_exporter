@@ -4,7 +4,7 @@
 [![GoDoc](https://godoc.org/github.com/iamseth/oracledb_exporter?status.svg)](http://godoc.org/github.com/iamseth/oracledb_exporter)
 [![Report card](https://goreportcard.com/badge/github.com/iamseth/oracledb_exporter)](https://goreportcard.com/badge/github.com/iamseth/oracledb_exporter)
 
-##### Table of Contents  
+##### Table of Contents
 
 [Description](#description)  
 [Installation](#installation)  
@@ -49,11 +49,25 @@ The following metrics are exposed currently.
 
 ## Docker
 
-You can run via Docker using an existing image. If you don't already have an Oracle server, you can run one locally in a container and then link the exporter to it.
+You can run via Docker using an existing image. Since version 0.4, the images are available on the github registry.
+
+Here an example to retrieve the version 0.4.3:
+
+```bash
+docker pull ghcr.io/iamseth/oracledb_exporter:0.4.3
+```
+
+And here a command to run it and forward the port:
+
+```bash
+docker run -it --rm -p 9161:9161 ghcr.io/iamseth/oracledb_exporter:0.4.3
+```
+
+If you don't already have an Oracle server, you can run one locally in a container and then link the exporter to it.
 
 ```bash
 docker run -d --name oracle -p 1521:1521 wnameless/oracle-xe-11g-r2:18.04-apex
-docker run -d --name oracledb_exporter --link=oracle -p 9161:9161 -e DATA_SOURCE_NAME=system/oracle@oracle/xe iamseth/oracledb_exporter
+docker run -d --name oracledb_exporter --link=oracle -p 9161:9161 -e DATA_SOURCE_NAME=system/oracle@oracle/xe ghcr.io/iamseth/oracledb_exporter:0.4.3
 ```
 
 Since 0.2.1, the exporter image exist with Alpine flavor. Watch out for their use. It is for the moment a test.
@@ -66,9 +80,9 @@ docker run -d --name oracledb_exporter --link=oracle -p 9161:9161 -e DATA_SOURCE
 
 Different Linux Distros:
 
-* `x.y.z` - Ubuntu Linux image
-* `x.y.z-oraclelinux` - Oracle Enterprise Linux image
-* `x.y.z-Alpine` - Alpine Linux image
+- `x.y.z` - Ubuntu Linux image
+- `x.y.z-oraclelinux` - Oracle Enterprise Linux image
+- `x.y.z-Alpine` - Alpine Linux image
 
 Forked Version:
 All the above docker images have a duplicate image tag ending in
@@ -155,8 +169,6 @@ ExecStart=/usr/local/bin/oracledb_exporter  \
 WantedBy=multi-user.target
 ```
 
-
-
 Then tell System D to read files:
 
     systemctl daemon-reload
@@ -181,6 +193,8 @@ Usage of oracledb_exporter:
         File that may contain various custom metrics in a TOML file.
   --default.metrics string
         Default TOML file metrics.
+  --web.systemd-socket
+        Use systemd socket activation listeners instead of port listeners (Linux only).
   --web.listen-address string
        	Address to listen on for web interface and telemetry. (default ":9161")
   --web.telemetry-path string
@@ -189,14 +203,14 @@ Usage of oracledb_exporter:
         Number of maximum idle connections in the connection pool. (default "0")
   --database.maxOpenConns string
         Number of maximum open connections in the connection pool. (default "10")
-  --web.config
-        Specify which web configuration file to load
+  --web.config.file
+        Path to configuration file that can enable TLS or authentication.
 ```
 
 # Default metrics
 
 This exporter comes with a set of default metrics defined in **default-metrics.toml**. You can modify this file or
-provide a different one using ``default.metrics`` option.
+provide a different one using `default.metrics` option.
 
 # Custom metrics
 
@@ -204,11 +218,13 @@ provide a different one using ``default.metrics`` option.
 
 This exporter does not have the metrics you want? You can provide new one using TOML file. To specify this file to the
 exporter, you can:
-- Use ``--custom.metrics`` flag followed by the TOML file
-- Export CUSTOM_METRICS variable environment (``export CUSTOM_METRICS=my-custom-metrics.toml``)
+
+- Use `--custom.metrics` flag followed by the TOML file
+- Export CUSTOM_METRICS variable environment (`export CUSTOM_METRICS=my-custom-metrics.toml`)
 
 This file must contain the following elements:
-- One or several metric section (``[[metric]]``)
+
+- One or several metric section (`[[metric]]`)
 - For each section a context, a request and a map between a field of your request and a comment.
 
 Here's a simple example:
@@ -314,10 +330,11 @@ This example allows to achieve this:
 
 ### Files & Folder:
 
-* tns_admin folder: `/path/to/tns_admin`
-* tnsnames.ora file: `/path/to/tns_admin/tnsnames.ora`
+- tns_admin folder: `/path/to/tns_admin`
+- tnsnames.ora file: `/path/to/tns_admin/tnsnames.ora`
 
 Example of a tnsnames.ora file:
+
 ```
 database =
 (DESCRIPTION =
@@ -333,9 +350,9 @@ database =
 
 ### Environment Variables
 
-* `TNS_ENTRY`: Name of the entry to use (`database` in the example file above)
-* `TNS_ADMIN`: Path you choose for the tns admin folder (`/path/to/tns_admin` in the example file above)
-* `DATA_SOURCE_NAME`: Datasource pointing to the `TNS_ENTRY` (`user/password@database` in the example file above)
+- `TNS_ENTRY`: Name of the entry to use (`database` in the example file above)
+- `TNS_ADMIN`: Path you choose for the tns admin folder (`/path/to/tns_admin` in the example file above)
+- `DATA_SOURCE_NAME`: Datasource pointing to the `TNS_ENTRY` (`user/password@database` in the example file above)
 
 # TLS connection to database
 
@@ -370,7 +387,7 @@ For more details, have a look at the following location: https://github.com/iams
 
 # Integration with Grafana
 
-An example Grafana dashboard is available [here](https://grafana.com/dashboards/3333).
+An example Grafana dashboard is available [here](https://grafana.com/grafana/dashboards/3333-oracledb/).
 
 # Build
 
@@ -390,7 +407,7 @@ Or Alpine:
 
 ## Linux binaries
 
-Retrieve Oracle RPMs (version 18.5):
+Retrieve Oracle RPMs (version x.y):
 
     make download-rpms
 
@@ -400,7 +417,7 @@ Then run build:
 
 ## Windows binaries
 
-*Stollen from https://github.com/iamseth/oracledb_exporter/issues/40*
+_Stollen from https://github.com/iamseth/oracledb_exporter/issues/40_
 
 First, download Oracle Instant Client 64-Bit version basic and sdk versions.
 
@@ -417,16 +434,16 @@ Run the MSYS2 MINGW64 terminal and set dependencies packages:
 
 - Update pacman:
 
-    pacman -Su
+  pacman -Su
 
 - Close terminal and open a new terminal
 - Update all other packages:
 
-    pacman -Su
+  pacman -Su
 
 - Install pkg-config and gcc:
 
-    pacman -S mingw64/mingw-w64-x86_64-pkg-config mingw64/mingw-w64-x86_64-gcc
+  pacman -S mingw64/mingw-w64-x86_64-pkg-config mingw64/mingw-w64-x86_64-gcc
 
 Go to the pkg-config dir **c:/msys64/mingw64/lib/pkgconfig/** and create **oci8.pc** with the following content:
 
@@ -486,8 +503,7 @@ version as they are embedded in the container.
 
 Here an example to run this exporter (to scrap metrics from system/oracle@//host:1521/service-or-sid) and bind the exporter port (9161) to the global machine:
 
-```docker run -it --rm -p 9161:9161 -e DATA_SOURCE_NAME=system/oracle@//host:1521/service-or-sid iamseth/oracledb_exporter:0.2.6a```
-
+`docker run -it --rm -p 9161:9161 -e DATA_SOURCE_NAME=system/oracle@//host:1521/service-or-sid iamseth/oracledb_exporter:0.2.6a`
 
 ## Error scraping for wait_time
 
@@ -497,7 +513,7 @@ If you experience an error `Error scraping for wait_time: sql: Scan error on col
 
 export NLS_LANG=AMERICAN_AMERICA.WE8ISO8859P1
 export DATA_SOURCE_NAME=system/oracle@myhost
-/path/to/binary --log.level error --web.listen-address 9161
+/path/to/binary --log.level error --web.listen-address :9161
 ```
 
 If using Docker, set the same variable using the -e flag.
@@ -520,7 +536,6 @@ The root cause is Oracle's reaction of quering ASM-related views without ASM use
 $ find $ORACLE_BASE/diag/rdbms -name '*.tr[cm]' -mtime +14 -delete
 ```
 
-
 ## TLS and basic authentication
 
 Apache Exporter supports TLS and basic authentication. This enables better
@@ -532,3 +547,10 @@ using the `--web.config` parameter. The format of the file is described
 
 Note that the TLS and basic authentication settings affect all HTTP endpoints:
 /metrics for scraping, /probe for probing, and the web UI.
+
+
+## Multi-target support
+
+This exporter supports the multi-target pattern. This allows running a single instance of this exporter for multiple Oracle targets.
+
+To use the multi-target functionality, send a http request to the endpoint `/scrape?target=foo:1521` where target is set to the DSN of the Oracle instance to scrape metrics from.

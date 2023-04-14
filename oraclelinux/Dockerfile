@@ -1,4 +1,10 @@
-FROM golang:1.19 AS build
+# Can't use a variable to refer to external image directly with COPY.
+# So using image in a step but doing nothing
+ARG ORACLE_IMAGE
+FROM ${ORACLE_IMAGE} as oracle-image
+
+# Build is starting here
+FROM docker.io/library/golang:1.19 AS build
 
 ARG ORACLE_VERSION
 ENV ORACLE_VERSION=${ORACLE_VERSION}
@@ -6,14 +12,15 @@ ARG MAJOR_VERSION
 ENV MAJOR_VERSION=${MAJOR_VERSION}
 ENV LD_LIBRARY_PATH "/usr/lib/oracle/${MAJOR_VERSION}/client64/lib"
 
-RUN apt-get -qq update && apt-get install --no-install-recommends -qq libaio1 rpm
-COPY oracle*${ORACLE_VERSION}*.rpm /
-RUN rpm -Uh --nodeps /oracle-instantclient*.x86_64.rpm && rm /*.rpm
+# Retrieving binaries from oracle image
+COPY --from=oracle-image /usr/lib/oracle /usr/lib/oracle
+COPY --from=oracle-image /usr/share/oracle /usr/share/oracle
+COPY --from=oracle-image /usr/include/oracle /usr/include/oracle
 
 COPY oci8.pc.template /usr/share/pkgconfig/oci8.pc
 RUN sed -i "s/@ORACLE_VERSION@/$ORACLE_VERSION/g" /usr/share/pkgconfig/oci8.pc && \
-    sed -i "s/@MAJOR_VERSION@/$MAJOR_VERSION/g" /usr/share/pkgconfig/oci8.pc && \
-    find /usr -name oci.pc
+  sed -i "s/@MAJOR_VERSION@/$MAJOR_VERSION/g" /usr/share/pkgconfig/oci8.pc && \
+  find /usr -name oci.pc
 RUN echo $LD_LIBRARY_PATH >> /etc/ld.so.conf.d/oracle.conf && ldconfig
 
 WORKDIR /go/src/oracledb_exporter
@@ -24,22 +31,20 @@ ARG VERSION
 ENV VERSION ${VERSION:-0.1.0}
 
 ENV PKG_CONFIG_PATH /go/src/oracledb_exporter
-ENV GOOS            linux
 
-RUN go build -v -ldflags "-X main.Version=${VERSION} -s -w"
+RUN GOOS=linux GOARCH=amd64 go build -v -ldflags "-X main.Version=${VERSION} -s -w"
 
-FROM oraclelinux:8-slim
+FROM docker.io/library/oraclelinux:8-slim
 
 ARG ORACLE_VERSION
 ENV ORACLE_VERSION=${ORACLE_VERSION}
 ARG MAJOR_VERSION
 ENV MAJOR_VERSION=${MAJOR_VERSION}
 
-RUN microdnf -y install oracle-release-el8 && \
-    microdnf -y install oracle-instantclient-release-el8 && \
-    microdnf -y install oracle-instantclient-basic && \
-    microdnf clean all
-
+# We only need lib directory
+COPY --from=build /usr/lib/oracle /usr/lib/oracle
+RUN microdnf -y install libaio && \
+  microdnf clean all
 
 ARG LEGACY_TABLESPACE
 ENV LEGACY_TABLESPACE=${LEGACY_TABLESPACE}
@@ -47,8 +52,8 @@ COPY --from=build /go/src/oracledb_exporter/oracledb_exporter /oracledb_exporter
 ADD ./default-metrics${LEGACY_TABLESPACE}.toml /default-metrics.toml
 
 RUN chmod 755 /oracledb_exporter && \
-    chmod 644 /default-metrics.toml && \
-    groupadd www-data && useradd -g www-data www-data
+  chmod 644 /default-metrics.toml && \
+  groupadd www-data && useradd -g www-data www-data
 USER www-data
 ENV DATA_SOURCE_NAME system/oracle@oracle/xe
 ENV LD_LIBRARY_PATH "/usr/lib/oracle/${MAJOR_VERSION}/client64/lib"
